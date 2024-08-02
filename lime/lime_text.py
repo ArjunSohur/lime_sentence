@@ -14,6 +14,8 @@ from sklearn.utils import check_random_state
 from . import explanation
 from . import lime_base
 
+import pdb
+
 # Arjun's code
 from nltk.tokenize.punkt import PunktSentenceTokenizer
 
@@ -62,14 +64,18 @@ class TextDomainMapper(explanation.DomainMapper):
              text: if False, return empty
              opacity: if True, fade colors according to weight
         """
+
         if not text:
             return u''
         text = (self.indexed_string.raw_string()
                 .encode('utf-8', 'xmlcharrefreplace').decode('utf-8'))
+
+
         text = re.sub(r'[<>&]', '|', text)
         exp = [(self.indexed_string.word(x[0]),
                 self.indexed_string.string_position(x[0]),
                 x[1]) for x in exp]
+
         all_occurrences = list(itertools.chain.from_iterable(
             [itertools.product([x[0]], x[1], [x[2]]) for x in exp]))
         all_occurrences = [(x[0], int(x[1]), x[2]) for x in all_occurrences]
@@ -121,7 +127,7 @@ class IndexedString(object):
         # Arjun's code
         print("splitting sentences")
         self.raw = raw_string
-        sentences_span = PunktSentenceTokenizer().span_tokenize(self.raw)
+        sentences_span = list(PunktSentenceTokenizer().span_tokenize(self.raw))
         self.as_list = [self.raw[begin:end] for (begin, end) in sentences_span]
         self.as_np = np.array(self.as_list)
         non_word = re.compile(r'(%s)|$' % split_expression).match
@@ -168,6 +174,7 @@ class IndexedString(object):
 
     def string_position(self, id_):
         """Returns a np array with indices to id_ (int) occurrences"""
+
         if self.bow:
             return self.string_start[self.positions[id_]]
         else:
@@ -360,7 +367,6 @@ class LimeTextExplainer(object):
             char_level: an boolean identifying that we treat each character
                 as an independent occurence in the string
         """
-        print("SoHUR'S VERSION")
         if kernel is None:
             def kernel(d, kernel_width):
                 return np.sqrt(np.exp(-(d ** 2) / kernel_width ** 2))
