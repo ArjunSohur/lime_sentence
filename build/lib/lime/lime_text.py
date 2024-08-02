@@ -14,8 +14,6 @@ from sklearn.utils import check_random_state
 from . import explanation
 from . import lime_base
 
-# Arjun's code
-from nltk.tokenize.punkt import PunktSentenceTokenizer
 
 class TextDomainMapper(explanation.DomainMapper):
     """Maps feature ids to words or word-positions"""
@@ -116,20 +114,9 @@ class IndexedString(object):
             self.as_list = [s for s in splitter.split(self.raw) if s]
             non_word = splitter.match
 
-        # the following lines are for splitting on sentences instead of words. 
-        # Enables using sentences as perturbation units instead of words.
-        # Arjun's code
-        print("splitting sentences")
-        self.raw = raw_string
-        sentences_span = PunktSentenceTokenizer().span_tokenize(self.raw)
-        self.as_list = [self.raw[begin:end] for (begin, end) in sentences_span]
         self.as_np = np.array(self.as_list)
-        non_word = re.compile(r'(%s)|$' % split_expression).match
-        self.string_start = np.array([begin for (begin, end) in sentences_span])
-
-        # self.as_np = np.array(self.as_list)
-        # self.string_start = np.hstack(
-        #     ([0], np.cumsum([len(x) for x in self.as_np[:-1]])))
+        self.string_start = np.hstack(
+            ([0], np.cumsum([len(x) for x in self.as_np[:-1]])))
         vocab = {}
         self.inverse_vocab = []
         self.positions = []
@@ -360,7 +347,7 @@ class LimeTextExplainer(object):
             char_level: an boolean identifying that we treat each character
                 as an independent occurence in the string
         """
-        print("SoHUR'S VERSION")
+
         if kernel is None:
             def kernel(d, kernel_width):
                 return np.sqrt(np.exp(-(d ** 2) / kernel_width ** 2))
@@ -415,8 +402,7 @@ class LimeTextExplainer(object):
             An Explanation object (see explanation.py) with the corresponding
             explanations.
         """
-        # import pdb
-        # pdb.set_trace()
+
         indexed_string = (IndexedCharacters(
             text_instance, bow=self.bow, mask_string=self.mask_string)
                           if self.char_level else
