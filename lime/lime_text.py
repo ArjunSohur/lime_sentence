@@ -14,9 +14,11 @@ from sklearn.utils import check_random_state
 from . import explanation
 from . import lime_base
 
+
 import pdb
 
 # Arjun's code
+from blingfire import text_to_sentences
 from nltk.tokenize.punkt import PunktSentenceTokenizer
 
 class TextDomainMapper(explanation.DomainMapper):
@@ -125,7 +127,6 @@ class IndexedString(object):
         # the following lines are for splitting on sentences instead of words. 
         # Enables using sentences as perturbation units instead of words.
         # Arjun's code
-        print("splitting sentences")
         self.raw = raw_string
         sentences_span = list(PunktSentenceTokenizer().span_tokenize(self.raw))
         self.as_list = [self.raw[begin:end] for (begin, end) in sentences_span]
@@ -199,7 +200,18 @@ class IndexedString(object):
                 [self.as_list[i] if mask[i] else self.mask_string
                  for i in range(mask.shape[0])])
         return ''.join([self.as_list[v] for v in mask.nonzero()[0]])
+    
+    # gets the max index of the opinion
+    # relies on [OPINION END] being in there
+    def get_mask(self, mask = False):
+        if not mask:
+            return 0
 
+        for index, s in enumerate(self.as_list):
+            if '[OPINION END]' in s:
+                return index
+        return 0
+        
     @staticmethod
     def _segment_with_tokens(text, tokens):
         """Segment a string around the tokens created by a passed-in tokenizer"""
@@ -250,8 +262,8 @@ class IndexedCharacters(object):
         self.mask_string = chr(0) if mask_string is None else mask_string
         self.string_start = np.arange(len(self.raw))
         vocab = {}
-        self.inverse_vocab = []
-        self.positions = []
+        self.inverse_vocab = [] # sentences
+        self.positions = [] # indicies
         self.bow = bow
         non_vocab = set()
         for i, char in enumerate(self.as_np):
@@ -390,9 +402,10 @@ class LimeTextExplainer(object):
                          labels=(1,),
                          top_labels=None,
                          num_features=10,
-                         num_samples=5000,
+                         num_samples=100,
                          distance_metric='cosine',
-                         model_regressor=None):
+                         model_regressor=None,
+                         op_mask = False):
         """Generates explanations for a prediction.
 
         First, we generate neighborhood data by randomly hiding features from
@@ -417,28 +430,54 @@ class LimeTextExplainer(object):
             model_regressor: sklearn regressor to use in explanation. Defaults
             to Ridge regression in LimeBase. Must have model_regressor.coef_
             and 'sample_weight' as a parameter to model_regressor.fit()
+            op_mask: if true, it stops the original post from being perterbed
         Returns:
             An Explanation object (see explanation.py) with the corresponding
             explanations.
         """
-        # import pdb
+
         # pdb.set_trace()
-        indexed_string = (IndexedCharacters(
-            text_instance, bow=self.bow, mask_string=self.mask_string)
-                          if self.char_level else
-                          IndexedString(text_instance, bow=self.bow,
-                                        split_expression=self.split_expression,
-                                        mask_string=self.mask_string))
+
+        # indexed_string keeps most string related data
+        # had raw data, sentence level data, positions
+        if self.char_level:
+             indexed_string = IndexedCharacters(
+                text_instance, 
+                bow=self.bow, 
+                mask_string=self.mask_string)
+        else:
+            indexed_string = IndexedString(
+                text_instance, 
+                bow=self.bow,
+                split_expression=self.split_expression,
+                mask_string=self.mask_string)
+        
+        # gets positioned string
         domain_mapper = TextDomainMapper(indexed_string)
+
+        # data is mask on each perterbation by position
+        # yss - probability scores
+        # distances - distance of perterbation from gt
         data, yss, distances = self.__data_labels_distances(
             indexed_string, classifier_fn, num_samples,
-            distance_metric=distance_metric)
+            distance_metric=distance_metric, mask_num=indexed_string.get_mask(mask=op_mask))
+        
+        # pdb.set_trace()
+
         if self.class_names is None:
             self.class_names = [str(x) for x in range(yss[0].shape[0])]
-        ret_exp = explanation.Explanation(domain_mapper=domain_mapper,
-                                          class_names=self.class_names,
-                                          random_state=self.random_state)
+
+        # pdb.set_trace()
+
+        ret_exp = explanation.Explanation(
+            domain_mapper=domain_mapper,
+            class_names=self.class_names,
+            random_state=self.random_state)
+        
         ret_exp.predict_proba = yss[0]
+
+        # pdb.set_trace()
+
         if top_labels:
             labels = np.argsort(yss[0])[-top_labels:]
             ret_exp.top_labels = list(labels)
@@ -451,13 +490,18 @@ class LimeTextExplainer(object):
                 data, yss, distances, label, num_features,
                 model_regressor=model_regressor,
                 feature_selection=self.feature_selection)
+
+        # pdb.set_trace()    
+        
         return ret_exp
 
     def __data_labels_distances(self,
                                 indexed_string,
                                 classifier_fn,
                                 num_samples,
-                                distance_metric='cosine'):
+                                distance_metric='cosine',
+                                mask_num = 0): 
+        # mask reserves the first mask_num sentences from perturbation, which protects the op
         """Generates a neighborhood around a prediction.
 
         Generates neighborhood data by randomly removing words from
@@ -489,17 +533,31 @@ class LimeTextExplainer(object):
             return sklearn.metrics.pairwise.pairwise_distances(
                 x, x[0], metric=distance_metric).ravel() * 100
 
+        # size of sentence positions
         doc_size = indexed_string.num_words()
-        sample = self.random_state.randint(1, doc_size + 1, num_samples - 1)
+
+        # gets an array with all the number of the sentence that you 
+        # will perterb for each one
+        print("Masking sentences up to index", mask_num)
+        sample = self.random_state.randint(1, doc_size + 1 - mask_num, num_samples - 1)
+
+        # shape of number of perterbations by the number of sentences
         data = np.ones((num_samples, doc_size))
         data[0] = np.ones(doc_size)
-        features_range = range(doc_size)
+
+        features_range = range(mask_num, doc_size)
         inverse_data = [indexed_string.raw_string()]
+
         for i, size in enumerate(sample, start=1):
             inactive = self.random_state.choice(features_range, size,
                                                 replace=False)
             data[i, inactive] = 0
+
+            old_data = data
             inverse_data.append(indexed_string.inverse_removing(inactive))
+
+            # pdb.set_trace()
+        
         labels = classifier_fn(inverse_data)
         distances = distance_fn(sp.sparse.csr_matrix(data))
         return data, labels, distances

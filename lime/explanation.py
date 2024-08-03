@@ -185,6 +185,8 @@ class Explanation(object):
     def show_in_notebook(self,
                          labels=None,
                          predict_proba=True,
+                         text = None,
+                         truth = None,
                          show_predicted_value=True,
                          **kwargs):
         """Shows html explanation in ipython notebook.
@@ -196,6 +198,8 @@ class Explanation(object):
         display(HTML(self.as_html(labels=labels,
                                   predict_proba=predict_proba,
                                   show_predicted_value=show_predicted_value,
+                                  text=text,
+                                  truth=truth,
                                   **kwargs)))
 
     def save_to_file(self,
@@ -223,6 +227,8 @@ class Explanation(object):
                 labels=None,
                 predict_proba=True,
                 show_predicted_value=True,
+                text = None,
+                truth = None,
                 **kwargs):
         """Returns the explanation as an html page.
 
