@@ -405,7 +405,8 @@ class LimeTextExplainer(object):
                          num_samples=100,
                          distance_metric='cosine',
                          model_regressor=None,
-                         op_mask = False):
+                         op_mask = False,
+                         batch_size=0):
         """Generates explanations for a prediction.
 
         First, we generate neighborhood data by randomly hiding features from
@@ -431,6 +432,8 @@ class LimeTextExplainer(object):
             to Ridge regression in LimeBase. Must have model_regressor.coef_
             and 'sample_weight' as a parameter to model_regressor.fit()
             op_mask: if true, it stops the original post from being perterbed
+            batch_size: if running bigger jobs, batches the classificaiton_fn
+                calls.  Defaults to 0 => no batch.
         Returns:
             An Explanation object (see explanation.py) with the corresponding
             explanations.
@@ -460,7 +463,7 @@ class LimeTextExplainer(object):
         # distances - distance of perterbation from gt
         data, yss, distances = self.__data_labels_distances(
             indexed_string, classifier_fn, num_samples,
-            distance_metric=distance_metric, mask_num=indexed_string.get_mask(mask=op_mask))
+            distance_metric=distance_metric, mask_num=indexed_string.get_mask(mask=op_mask), batch_size=batch_size)
         
         # pdb.set_trace()
 
@@ -500,7 +503,8 @@ class LimeTextExplainer(object):
                                 classifier_fn,
                                 num_samples,
                                 distance_metric='cosine',
-                                mask_num = 0): 
+                                mask_num = 0,
+                                batch_size = 0): 
         # mask reserves the first mask_num sentences from perturbation, which protects the op
         """Generates a neighborhood around a prediction.
 
@@ -558,6 +562,17 @@ class LimeTextExplainer(object):
 
             # pdb.set_trace()
         
-        labels = classifier_fn(inverse_data)
+        if not batch_size:
+            labels = classifier_fn(inverse_data)
+        else:
+            # batching code - ungood for now
+            labels = None
+            for i in range(0, len(inverse_data), batch_size):
+                if labels is None:
+                    labels = classifier_fn(inverse_data[i:i+batch_size])
+                else:
+                    labels = np.append(labels, classifier_fn(inverse_data[i:i+batch_size]), axis=0)
+
+
         distances = distance_fn(sp.sparse.csr_matrix(data))
         return data, labels, distances
