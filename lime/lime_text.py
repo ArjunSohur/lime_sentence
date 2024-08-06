@@ -379,18 +379,25 @@ class LimeTextExplainer(object):
             char_level: an boolean identifying that we treat each character
                 as an independent occurence in the string
         """
+
+        # The kernel function is pi_x(z) in the paper
         if kernel is None:
             def kernel(d, kernel_width):
                 return np.sqrt(np.exp(-(d ** 2) / kernel_width ** 2))
 
+        # Setting the distance to be the only parameter
         kernel_fn = partial(kernel, kernel_width=kernel_width)
 
         self.random_state = check_random_state(random_state)
+
+        # Lime base procides us with "explain_instance_with_data" which is all it does
         self.base = lime_base.LimeBase(kernel_fn, verbose,
                                        random_state=self.random_state)
+        # help the lime base do its thing
+        self.feature_selection = feature_selection
+
         self.class_names = class_names
         self.vocabulary = None
-        self.feature_selection = feature_selection
         self.bow = bow
         self.mask_string = mask_string
         self.split_expression = split_expression
@@ -461,6 +468,7 @@ class LimeTextExplainer(object):
         # data is mask on each perterbation by position
         # yss - probability scores
         # distances - distance of perterbation from gt
+        # generates a neighrborhood for us
         data, yss, distances = self.__data_labels_distances(
             indexed_string, classifier_fn, num_samples,
             distance_metric=distance_metric, mask_num=indexed_string.get_mask(mask=op_mask), batch_size=batch_size)
@@ -471,7 +479,8 @@ class LimeTextExplainer(object):
             self.class_names = [str(x) for x in range(yss[0].shape[0])]
 
         # pdb.set_trace()
-
+        
+        #ret_exo will house all the information about performances and such
         ret_exp = explanation.Explanation(
             domain_mapper=domain_mapper,
             class_names=self.class_names,
