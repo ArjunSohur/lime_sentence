@@ -502,8 +502,6 @@ class LimeTextExplainer(object):
                 data, yss, distances, label, num_features,
                 model_regressor=model_regressor,
                 feature_selection=self.feature_selection)
-
-        # pdb.set_trace()    
         
         return ret_exp
 

@@ -178,6 +178,8 @@ class LimeBase(object):
             local_pred is the prediction of the explanation model on the original instance
         """
 
+        import pdb
+
         weights = self.kernel_fn(distances)
         labels_column = neighborhood_labels[:, label]
         used_features = self.feature_selection(neighborhood_data,
@@ -185,17 +187,25 @@ class LimeBase(object):
                                                weights,
                                                num_features,
                                                feature_selection)
+
         if model_regressor is None:
             model_regressor = Ridge(alpha=1, fit_intercept=True,
                                     random_state=self.random_state)
         easy_model = model_regressor
+
         easy_model.fit(neighborhood_data[:, used_features],
                        labels_column, sample_weight=weights)
+
         prediction_score = easy_model.score(
             neighborhood_data[:, used_features],
             labels_column, sample_weight=weights)
 
         local_pred = easy_model.predict(neighborhood_data[0, used_features].reshape(1, -1))
+
+        ret = (easy_model.intercept_,
+                sorted(zip(used_features, easy_model.coef_),
+                       key=lambda x: np.abs(x[1]), reverse=True),
+                prediction_score, local_pred)
 
         if self.verbose:
             print('Intercept', easy_model.intercept_)
